@@ -20,21 +20,28 @@ class GaragaraScene extends Phaser.Scene {
     this.graphics = this.add.graphics();
     this.scrollX = 0;
 
-    // 入力イベント
-    this.input.on('pointermove', p=>{
-      if (p.isDown) this.makeNoise(p.x, p.y);
-    });
-
-    // WebAudio ノイズ用バッファ作成
+    // ==== AudioContext & ノイズバッファ ====
     this.audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const buffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate, this.audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
     for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.25;
     this.noiseBuf = buffer;
+
+    // ==== ユーザー操作でAudioContextを解禁 ====
+    this.input.on('pointerdown', ()=>{
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+      this.makeNoise();
+    });
+
+    this.input.on('pointermove', p=>{
+      if (p.isDown) this.makeNoise();
+    });
   }
 
   update(){
-    this.scrollX += 2; // 流れる速度
+    this.scrollX += 2; // トタンが流れる速度
     this.drawTin();
   }
 
@@ -48,14 +55,13 @@ class GaragaraScene extends Phaser.Scene {
     }
   }
 
-  makeNoise(x,y){
-    // 触ったら短いノイズ音を出す
+  makeNoise(){
     const src = this.audioCtx.createBufferSource();
     src.buffer = this.noiseBuf;
     const gain = this.audioCtx.createGain();
     gain.gain.value = 0.3;
     src.connect(gain).connect(this.audioCtx.destination);
-    src.start(0,0,0.07);
+    src.start(0,0,0.05); // 短い「ガラッ」音
   }
 }
 
