@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+  <title>トタンガラガラ</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+  <style>
+    body { margin:0; background:#0c0f14; }
+    canvas { display:block; margin:auto; touch-action:none; }
+  </style>
+</head>
+<body>
+
+<script>
+class GaragaraScene extends Phaser.Scene {
+  constructor(){ super('main'); }
+
+  create(){
+    this.graphics = this.add.graphics();
+    this.scrollX = 0;
+
+    // 入力イベント
+    this.input.on('pointermove', p=>{
+      if (p.isDown) this.makeNoise(p.x, p.y);
+    });
+
+    // WebAudio ノイズ用バッファ作成
+    this.audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const buffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate, this.audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.25;
+    this.noiseBuf = buffer;
+  }
+
+  update(){
+    this.scrollX += 2; // 流れる速度
+    this.drawTin();
+  }
+
+  drawTin(){
+    this.graphics.clear();
+    this.graphics.lineStyle(2, 0x999999, 1);
+    const baseY = this.sys.game.config.height * 0.6;
+    for (let i=0;i<this.sys.game.config.width;i+=6){
+      const yy = baseY + Math.sin((i+this.scrollX)/15)*8;
+      this.graphics.lineBetween(i, yy, i+6, yy);
+    }
+  }
+
+  makeNoise(x,y){
+    // 触ったら短いノイズ音を出す
+    const src = this.audioCtx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const gain = this.audioCtx.createGain();
+    gain.gain.value = 0.3;
+    src.connect(gain).connect(this.audioCtx.destination);
+    src.start(0,0,0.07);
+  }
+}
+
+const config = {
+  type: Phaser.AUTO,
+  width: window.innerWidth,
+  height: window.innerHeight,
+  backgroundColor: '#0c0f14',
+  scene: [GaragaraScene]
+};
+
+new Phaser.Game(config);
+</script>
+
+</body>
+</html>
