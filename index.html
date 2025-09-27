@@ -20,23 +20,17 @@ class GaragaraScene extends Phaser.Scene {
     this.graphics = this.add.graphics();
     this.scrollX = 0;
 
-    // ==== AudioContext & ノイズバッファ ====
-    this.audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    const buffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate, this.audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.25;
-    this.noiseBuf = buffer;
+    // ==== AudioContext をタッチ操作で初期化 ====
+    this.audioCtx = null;
+    this.noiseBuf = null;
+    this.resumePromise = null;
 
-    // ==== ユーザー操作でAudioContextを解禁 ====
     this.input.on('pointerdown', ()=>{
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
-      }
-      this.makeNoise();
+      this.playNoise();
     });
 
     this.input.on('pointermove', p=>{
-      if (p.isDown) this.makeNoise();
+      if (p.isDown) this.playNoise();
     });
   }
 
@@ -55,13 +49,45 @@ class GaragaraScene extends Phaser.Scene {
     }
   }
 
-  makeNoise(){
-    const src = this.audioCtx.createBufferSource();
-    src.buffer = this.noiseBuf;
-    const gain = this.audioCtx.createGain();
-    gain.gain.value = 0.3;
-    src.connect(gain).connect(this.audioCtx.destination);
-    src.start(0,0,0.05); // 短い「ガラッ」音
+  playNoise(){
+    this.ensureAudio().then(()=>{
+      if (!this.audioCtx || !this.noiseBuf || this.audioCtx.state !== 'running') return;
+      const src = this.audioCtx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const gain = this.audioCtx.createGain();
+      gain.gain.value = 0.3;
+      src.connect(gain).connect(this.audioCtx.destination);
+      src.start(0,0,0.05); // 短い「ガラッ」音
+    }).catch(()=>{});
+  }
+
+  ensureAudio(){
+    if (!this.audioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return Promise.resolve();
+      this.audioCtx = new AudioCtx();
+      const buffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate, this.audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.25;
+      this.noiseBuf = buffer;
+    }
+
+    if (this.audioCtx.state === 'running') {
+      return Promise.resolve();
+    }
+
+    if (!this.resumePromise) {
+      this.resumePromise = this.audioCtx.resume()
+        .catch(err=>{
+          this.resumePromise = null;
+          throw err;
+        })
+        .then(()=>{
+          this.resumePromise = null;
+        });
+    }
+
+    return this.resumePromise;
   }
 }
 
