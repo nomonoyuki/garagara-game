@@ -24,19 +24,27 @@ class GaragaraScene extends Phaser.Scene {
     this.audioCtx = null;
     this.noiseBuf = null;
     this.resumePromise = null;
+    this.hasInteracted = false;
+    this.pointerThreshold = 14;
+    this.lastPointerDiff = null;
+    this.lastNoiseTime = 0;
 
-    this.input.on('pointerdown', ()=>{
-      this.playNoise();
+    this.input.on('pointerdown', pointer=>{
+      this.hasInteracted = true;
+      this.lastPointerDiff = null;
+      this.ensureAudio();
+      this.tryPlayTinNoise(pointer, true);
     });
 
-    this.input.on('pointermove', p=>{
-      if (p.isDown) this.playNoise();
+    this.input.on('pointerup', ()=>{
+      this.lastPointerDiff = null;
     });
   }
 
   update(){
     this.scrollX += 2; // トタンが流れる速度
     this.drawTin();
+    this.trackPointer();
   }
 
   drawTin(){
@@ -93,9 +101,64 @@ class GaragaraScene extends Phaser.Scene {
         .then(()=>{
           this.resumePromise = null;
         });
-    }
+      }
 
     return this.resumePromise;
+  }
+
+  trackPointer(){
+    const pointer = this.input.activePointer;
+    if (!pointer) return;
+    this.tryPlayTinNoise(pointer);
+  }
+
+  tryPlayTinNoise(pointer, force=false){
+    if (!pointer) return;
+
+    if (!this.hasInteracted) return;
+
+    const width = this.sys.game.config.width;
+    const height = this.sys.game.config.height;
+    if (pointer.x < 0 || pointer.x > width || pointer.y < 0 || pointer.y > height) {
+      this.lastPointerDiff = null;
+      return;
+    }
+
+    if (pointer.pointerType !== 'mouse' && !pointer.isDown) {
+      this.lastPointerDiff = null;
+      return;
+    }
+
+    const waveY = this.getTinY(pointer.x);
+    const diff = pointer.y - waveY;
+    const threshold = this.pointerThreshold;
+    const now = this.time.now;
+
+    const lastDiff = this.lastPointerDiff;
+    let shouldPlay = false;
+
+    if (force) {
+      shouldPlay = Math.abs(diff) <= threshold;
+    } else if (lastDiff !== null) {
+      const crossed = lastDiff * diff <= 0;
+      const within = Math.abs(diff) <= threshold;
+      const wasWithin = Math.abs(lastDiff) <= threshold;
+      shouldPlay = (crossed && (within || wasWithin)) || (!wasWithin && within);
+    } else {
+      shouldPlay = Math.abs(diff) <= threshold;
+    }
+
+    if (shouldPlay && now - this.lastNoiseTime > 60) {
+      this.lastNoiseTime = now;
+      this.playNoise();
+    }
+
+    this.lastPointerDiff = diff;
+  }
+
+  getTinY(x){
+    const baseY = this.sys.game.config.height * 0.6;
+    return baseY + Math.sin((x + this.scrollX)/15)*8;
   }
 }
 
